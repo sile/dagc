@@ -9,7 +9,7 @@
     An AGC example that applies the audio processing to the mic input and outputs the result to the speaker. <br />
     In this example, we update the gain value only when voice is detected in an input audio frame
     to prevent amplificating background noises.
-    To detect voice, the <a href="https://github.com/shiguredo/rnnoise-wasm">rnnoise-wasm</a> library is used.
+    To detect voice, <a href="https://github.com/shiguredo/rnnoise-wasm">rnnoise-wasm</a> library is used.
 
     <br /><br />
     NOTE: This example only supports Chromium-based browsers such as Chrome and Edge.
@@ -22,9 +22,9 @@
     <h3>Output Audio AGC Type</h3>
 
     <select id="agcType" size="3" onchange="changeOutputAudio()">
-      <option value="NONE" selected>None (original audio)</option>
+      <option value="NONE">None (original audio)</option>
       <option value="BROWSER_AGC">Browser's AGC</option>
-      <option value="OUR_AGC">Our AGC</option>
+      <option value="OUR_AGC" selected>Our AGC</option>
     </select><br />
 
     <h3>Our AGC Settings</h3>
