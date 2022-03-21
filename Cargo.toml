@@ -2,8 +2,18 @@
 name = "dagc"
 version = "0.1.0"
 edition = "2021"
+authors = ["Takeru Ohta <phjgt308@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "Digital AGC (Automatic Gain Control)"
+homepage = "https://github.com/sile/dagc"
+repository = "https://github.com/sile/dagc"
+readme = "README.md"
+categories = ["multimedia::audio"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[badges]
+coveralls = { repository = "sile/dagc" }
 
 [dependencies]
 thiserror = "1"
