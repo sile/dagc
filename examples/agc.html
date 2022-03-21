@@ -144,10 +144,9 @@
                       new TransformStream({
                           transform: (data, controller) => {
                               data.copyTo(buffer, { planeIndex: 0 });
-                              controller.enqueue(data);
-
                               const rms = calcRMS(buffer);
                               rmsGraph.data.datasets[0].data.push({x: Date.now(), y: rms});
+                              controller.enqueue(data);
                           },
                       }),
                   )
@@ -172,10 +171,9 @@
                       new TransformStream({
                           transform: (data, controller) => {
                               data.copyTo(buffer, { planeIndex: 0 });
-                              controller.enqueue(data);
-
                               const rms = calcRMS(buffer);
                               rmsGraph.data.datasets[1].data.push({x: Date.now(), y: rms});
+                              controller.enqueue(data);
                           },
                       }),
                   )
@@ -188,7 +186,7 @@
           const constraints = {
               echoCancellation: true,
               noiseSuppression: true,
-              autoGainControl: true,
+              autoGainControl: false,
           };
           return navigator.mediaDevices.getUserMedia({audio: constraints}).then(async (stream) => {
               const track = stream.getAudioTracks()[0];
