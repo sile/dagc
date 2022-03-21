@@ -21,7 +21,7 @@ pub struct MonoAgc {
     desired_output_rms: f32,
     distortion_factor: f32,
     gain: f32,
-    freezed: bool,
+    frozen: bool,
 }
 
 impl MonoAgc {
@@ -48,7 +48,7 @@ impl MonoAgc {
             desired_output_rms,
             distortion_factor,
             gain: 1.0,
-            freezed: false,
+            frozen: false,
         })
     }
 
@@ -57,12 +57,12 @@ impl MonoAgc {
     /// For example, if you apply AGC to an audio stream including speech, it would be preferable to freeze the gain update during the non-speech part to prevent amplifying background noises.
     ///
     pub fn freeze_gain(&mut self, freeze: bool) {
-        self.freezed = freeze;
+        self.frozen = freeze;
     }
 
     /// Returns whether the gain update is frozen or not.
     pub const fn is_gain_frozen(&self) -> bool {
-        self.freezed
+        self.frozen
     }
 
     /// Returns the current gain value.
@@ -76,11 +76,33 @@ impl MonoAgc {
     pub fn process(&mut self, samples: &mut [f32]) {
         for x in samples {
             *x *= self.gain;
-            if !self.freezed {
+            if !self.frozen {
                 let y = x.powi(2) / self.desired_output_rms;
                 let z = 1.0 + (self.distortion_factor * (1.0 - y));
                 self.gain *= z;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let mut agc = MonoAgc::new(0.001, 0.0001).expect("unreachable");
+        assert_eq!(agc.gain(), 1.0);
+        assert_eq!(agc.is_gain_frozen(), false);
+        agc.freeze_gain(true);
+        assert_eq!(agc.is_gain_frozen(), true);
+
+        let mut samples = [0.5, 1.0, -0.2];
+        agc.process(&mut samples);
+        assert_eq!(agc.gain(), 1.0);
+
+        agc.freeze_gain(false);
+        agc.process(&mut samples);
+        assert_ne!(agc.gain(), 1.0);
     }
 }
