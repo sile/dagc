@@ -24,10 +24,10 @@
     <select id="agcType" size="3" onchange="changeOutputAudio()">
       <option value="NONE">None (original audio)</option>
       <option value="BROWSER_AGC">Browser's AGC</option>
-      <option value="OUR_AGC" selected>Our AGC</option>
+      <option value="THIS_AGC" selected>This AGC</option>
     </select><br />
 
-    <h3>Our AGC Settings</h3>
+    <h3>This AGC Settings</h3>
     Desirable Output RMS (volume level):
     <select id="desirableOutputRms" size="1" onchange="initAgc()">
       <option value="0.1">0.1</option>
@@ -77,7 +77,7 @@
                       borderColor: 'blue'
                   },
                   {
-                      label: 'Our AGC',
+                      label: 'This AGC',
                       data: [],
                       borderColor: 'green'
                   },
@@ -182,7 +182,7 @@
           });
       }
 
-      function playOurAgcAudio() {
+      function playThisAgcAudio() {
           const constraints = {
               echoCancellation: true,
               noiseSuppression: true,
@@ -249,11 +249,11 @@
 
       let originalStream;
       let browserAgcStream;
-      let ourAgcStream;
+      let thisAgcStream;
       (async () => {
           originalStream = await playOriginalAudio();
           browserAgcStream = await playBrowserAgcAudio();
-          ourAgcStream = await playOurAgcAudio();
+          thisAgcStream = await playThisAgcAudio();
 
           const audioElement = document.getElementById('audio');
           audioElement.srcObject = originalStream;
@@ -269,8 +269,8 @@
           case 'BROWSER_AGC':
               audioElement.srcObject = browserAgcStream;
               break;
-          case 'OUR_AGC':
-              audioElement.srcObject = ourAgcStream;
+          case 'THIS_AGC':
+              audioElement.srcObject = thisAgcStream;
               break;
           }
       }
