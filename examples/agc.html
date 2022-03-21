@@ -4,134 +4,279 @@
     <title>AGC Example</title>
   </head>
   <body>
-    <h1>AGC Example</h1>
+    <h1>AGC (Automatic Gain Control) Example</h1>
 
-    <br />
+    An AGC example that applies the audio processing to the mic input and outputs the result to the speaker. <br />
+    In this example, we update the gain value only when voice is detected in an input audio frame
+    to prevent amplificating background noises.
+    To detect voice, the <a href="https://github.com/shiguredo/rnnoise-wasm">rnnoise-wasm</a> library is used.
+
+    <br /><br />
     NOTE: This example only supports Chromium-based browsers such as Chrome and Edge.
 
     <h3>References</h3>
 
-    Paper: TODO <br />
-    Rust Implementation: <a href="https://github.com/sile/fastagc">https://github.com/sile/fastagc</a><br />
+    Paper: <a href="https://hal.univ-lorraine.fr/hal-01397371/document">Design and implementation of a new digital automatic gain control</a><br />
+    Rust Implementation: <a href="https://github.com/sile/dagc">https://github.com/sile/dagc</a><br />
 
-    <h3>Settings</h3>
-    Parameter D:
-    <select id="paramD" size="1">
-      <option value="0.00001">0.00001</option>
-      <option value="0.0001">0.0001</option>
-      <option value="0.001" selected>0.001</option>
-      <option value="0.01">0.01</option>
-      <option value="0.1">0.1</option>
+    <h3>Output Audio AGC Type</h3>
+
+    <select id="agcType" size="3" onchange="changeOutputAudio()">
+      <option value="NONE" selected>None (original audio)</option>
+      <option value="BROWSER_AGC">Browser's AGC</option>
+      <option value="OUR_AGC">Our AGC</option>
     </select><br />
+
+    <h3>Our AGC Settings</h3>
+    Desirable Output RMS (volume level):
+    <select id="desirableOutputRms" size="1" onchange="initAgc()">
+      <option value="0.1">0.1</option>
+      <option value="0.01">0.01</option>
+      <option value="0.001" selected>0.001</option>
+      <option value="0.0001">0.0001</option>
+      <option value="0.00001">0.00001</option>
+    </select><br />
+
+    Distortion Factor:
+    <select id="distortionFactor" size="1" onchange="initAgc()">
+      <option value="0.001">0.001</option>
+      <option value="0.0001" selected>0.0001</option>
+      <option value="0.00001">0.00001</option>
+    </select><br />
+
+    VAD Threshold: <input id="vadThreshold" type="range" min="0" max="1" value="0.95" step="0.01"
+                          oninput="document.getElementById('vadThresholdValue').innerText = document.getElementById('vadThreshold').value">
+                 <span id="vadThresholdValue">0.95</span><br />
+
+    <h3>Output Audio RMS (per 10ms frame)</h3>
+
+    <div>
+      <canvas id="rmsGraph"></canvas>
+    </div>
 
     <audio id="audio" autoplay playsinline></audio>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.3.2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@1.27.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0"></script>
+
+    <script>
+      const config = {
+          type: 'line',
+          data: {
+              datasets: [
+                  {
+                      label: 'Original',
+                      data: [],
+                      borderColor: 'red'
+                  },
+                  {
+                      label: 'Browser AGC',
+                      data: [],
+                      borderColor: 'blue'
+                  },
+                  {
+                      label: 'Our AGC',
+                      data: [],
+                      borderColor: 'green'
+                  },
+                  {
+                      label: 'Desirable (plot dots only when voice is detected)',
+                      data: [],
+                      borderColor: 'orange'
+                  },
+              ]
+          },
+          options: {
+              plugins: {
+                  streaming: {
+                      frameRate: 1
+                  }
+              },
+              scales: {
+                  x: {type: 'realtime'},
+                  y: {type: 'logarithmic'},
+              }
+          }
+      };
+      const rmsGraph = new Chart(
+          document.getElementById('rmsGraph'),
+          config
+      );
+    </script>
+
     <script type="module">
       import {Rnnoise} from "https://cdn.jsdelivr.net/npm/@shiguredo/rnnoise-wasm@latest/dist/rnnoise.mjs";
-      import init, {Agc} from "./pkg/fastagc.js";
+      import init, {MonoAgc} from "./dagc-wasm/pkg/dagc_wasm.js";
 
-      (async () => { await init() })();
+      let agc;
+      function initAgc() {
+          agc = new MonoAgc(
+              document.getElementById('desirableOutputRms').value,
+              document.getElementById('distortionFactor').value
+          );
+      }
+      window.initAgc = initAgc;
+      (async () => { await init(); initAgc(); })();
 
-      function getUserMedia() {
+      function calcRMS(samples) {
+          let acc = 0;
+          for (const value of samples.values()) {
+              acc += value * value;
+          }
+          return acc / samples.length;
+      }
+
+      function playOriginalAudio() {
           const constraints = {
               echoCancellation: true,
               noiseSuppression: true,
-              autoGainControl: false
+              autoGainControl: false,
           };
-          return navigator.mediaDevices.getUserMedia({audio: constraints});
+          return navigator.mediaDevices.getUserMedia({audio: constraints}).then((stream) => {
+              const track = stream.getAudioTracks()[0];
+              const generator = new MediaStreamTrackGenerator({ kind: "audio" });
+              const processor = new MediaStreamTrackProcessor({ track });
+              let buffer = new Float32Array(480);
+              processor.readable
+                  .pipeThrough(
+                      new TransformStream({
+                          transform: (data, controller) => {
+                              data.copyTo(buffer, { planeIndex: 0 });
+                              controller.enqueue(data);
+
+                              const rms = calcRMS(buffer);
+                              rmsGraph.data.datasets[0].data.push({x: Date.now(), y: rms});
+                          },
+                      }),
+                  )
+                  .pipeTo(generator.writable);
+              return new MediaStream([generator]);
+          });
       }
 
-      function playAudio() {
-          const audioElement = document.getElementById('audio');
-          getUserMedia().then(async (stream) => {
+      function playBrowserAgcAudio() {
+          const constraints = {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+          };
+          return navigator.mediaDevices.getUserMedia({audio: constraints}).then((stream) => {
+              const track = stream.getAudioTracks()[0];
+              const generator = new MediaStreamTrackGenerator({ kind: "audio" });
+              const processor = new MediaStreamTrackProcessor({ track });
+              let buffer = new Float32Array(480);
+              processor.readable
+                  .pipeThrough(
+                      new TransformStream({
+                          transform: (data, controller) => {
+                              data.copyTo(buffer, { planeIndex: 0 });
+                              controller.enqueue(data);
+
+                              const rms = calcRMS(buffer);
+                              rmsGraph.data.datasets[1].data.push({x: Date.now(), y: rms});
+                          },
+                      }),
+                  )
+                  .pipeTo(generator.writable);
+              return new MediaStream([generator]);
+          });
+      }
+
+      function playOurAgcAudio() {
+          const constraints = {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+          };
+          return navigator.mediaDevices.getUserMedia({audio: constraints}).then(async (stream) => {
               const track = stream.getAudioTracks()[0];
 
               let rnnoise = await Rnnoise.load();
               const denoiseState = rnnoise.createDenoiseState();
 
-              let agc = new Agc(0.0001);
-              let total = 0.0;
-              let total2 = 0.0;
-              let count = 0;
-              let c = 0;
-              let update_c = 0;
-              let buffer = new Float32Array(480);
-              let buffer2 = new Float32Array(480);
+              let agcBuffer = new Float32Array(480);
+              let vadBuffer = new Float32Array(480);
               const generator = new MediaStreamTrackGenerator({ kind: "audio" });
               const processor = new MediaStreamTrackProcessor({ track });
-              //let V = 0.0012354917800208962;
-              let V = 0.01;
-              //let V = 0.12354917800208962;
               processor.readable
                   .pipeThrough(
                       new TransformStream({
                           transform: (data, controller) => {
-                              count += data.numberOfFrames;
-                              c+=1;
-                              data.copyTo(buffer, { planeIndex: 0 });
+                              data.copyTo(agcBuffer, { planeIndex: 0 });
+                              data.copyTo(vadBuffer, { planeIndex: 0 });
 
-                              data.copyTo(buffer2, { planeIndex: 0 });
-                              //buffer2 = buffer;
-                              for (const [i, value] of buffer2.entries()) {
-                                  buffer2[i] = value * 0x7fff;
+                              // Voice activity detection.
+                              for (const [i, value] of vadBuffer.entries()) {
+                                  vadBuffer[i] = value * 0x7fff;
                               }
-                              const vad = denoiseState.processFrame(buffer2);
-                              for (const [i, value] of buffer2.entries()) {
-                                  buffer2[i] = value / 0x7fff;
+                              const vad = denoiseState.processFrame(vadBuffer);
+                              for (const [i, value] of vadBuffer.entries()) {
+                                  vadBuffer[i] = value / 0x7fff;
                               }
 
-                              for (const [i, value] of buffer.entries()) {
-                                  total += value * value;
+                              // Automatic gain control.
+                              const vadThreshold = document.getElementById('vadThreshold').value;
+                              agc.freeze_gain(vad < vadThreshold);
+                              agc.process(agcBuffer);
+
+                              const rms = calcRMS(agcBuffer);
+                              const desirableRms = document.getElementById('desirableOutputRms').value;
+                              rmsGraph.data.datasets[2].data.push({x: Date.now(), y: rms});
+                              if (vad >= vadThreshold) {
+                                  rmsGraph.data.datasets[3].data.push({x: Date.now(), y: desirableRms});
                               }
 
-                              if (vad > 0.0) {
-                                  for (const [i, value] of buffer.entries()) {
-                                      buffer[i] = value / V;
-                                  }
-                                  agc.process(buffer, vad);
-                                  if (vad > 0.95) {
-                                      update_c +=1;
-                                  }
-                                  for (const [i, value] of buffer.entries()) {
-                                      buffer[i] = value * V;
-                                  }
-                              }
-
-                              for (const [i, value] of buffer.entries()) {
-                                  total2 += value * value;
-                              }
-
-                              if (c % 500 == 0) {
-                                  console.log("AVG: ", vad, total / count, total2 / count, update_c);
-                                  update_c = 0;
-                              }
-
-                              if (true) {
-                                  controller.enqueue(
-                                      new AudioData({
-                                          format: data.format,
-                                          sampleRate: data.sampleRate,
-                                          numberOfFrames: data.numberOfFrames,
-                                          numberOfChannels: data.numberOfChannels,
-                                          timestamp: data.timestamp,
-                                          data: buffer
-                                      })
-                                  );
-                                  buffer = new Float32Array(480);
-                                  data.close();
-                              } else {
-                                  controller.enqueue(data);
-                              }
+                              controller.enqueue(
+                                  new AudioData({
+                                      format: data.format,
+                                      sampleRate: data.sampleRate,
+                                      numberOfFrames: data.numberOfFrames,
+                                      numberOfChannels: data.numberOfChannels,
+                                      timestamp: data.timestamp,
+                                      data: agcBuffer
+                                  })
+                              );
+                              agcBuffer = new Float32Array(480);
+                              data.close();
                           },
                       }),
                   )
                   .pipeTo(generator.writable);
-              audioElement.srcObject = new MediaStream([generator]);
+              return new MediaStream([generator]);
           });
       }
-      window.playAudio = playAudio();
 
-      playAudio();
+
+      let originalStream;
+      let browserAgcStream;
+      let ourAgcStream;
+      (async () => {
+          originalStream = await playOriginalAudio();
+          browserAgcStream = await playBrowserAgcAudio();
+          ourAgcStream = await playOurAgcAudio();
+
+          const audioElement = document.getElementById('audio');
+          audioElement.srcObject = originalStream;
+      })();
+
+      function changeOutputAudio() {
+          const audioElement = document.getElementById('audio');
+
+          switch (document.getElementById('agcType').value) {
+          case 'NONE':
+              audioElement.srcObject = originalStream;
+              break;
+          case 'BROWSER_AGC':
+              audioElement.srcObject = browserAgcStream;
+              break;
+          case 'OUR_AGC':
+              audioElement.srcObject = ourAgcStream;
+              break;
+          }
+      }
+      window.changeOutputAudio = changeOutputAudio;
     </script>
   </body>
 </html>
