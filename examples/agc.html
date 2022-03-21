@@ -1,0 +1,137 @@
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>AGC Example</title>
+  </head>
+  <body>
+    <h1>AGC Example</h1>
+
+    <br />
+    NOTE: This example only supports Chromium-based browsers such as Chrome and Edge.
+
+    <h3>References</h3>
+
+    Paper: TODO <br />
+    Rust Implementation: <a href="https://github.com/sile/fastagc">https://github.com/sile/fastagc</a><br />
+
+    <h3>Settings</h3>
+    Parameter D:
+    <select id="paramD" size="1">
+      <option value="0.00001">0.00001</option>
+      <option value="0.0001">0.0001</option>
+      <option value="0.001" selected>0.001</option>
+      <option value="0.01">0.01</option>
+      <option value="0.1">0.1</option>
+    </select><br />
+
+    <audio id="audio" autoplay playsinline></audio>
+
+    <script type="module">
+      import {Rnnoise} from "https://cdn.jsdelivr.net/npm/@shiguredo/rnnoise-wasm@latest/dist/rnnoise.mjs";
+      import init, {Agc} from "./pkg/fastagc.js";
+
+      (async () => { await init() })();
+
+      function getUserMedia() {
+          const constraints = {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: false
+          };
+          return navigator.mediaDevices.getUserMedia({audio: constraints});
+      }
+
+      function playAudio() {
+          const audioElement = document.getElementById('audio');
+          getUserMedia().then(async (stream) => {
+              const track = stream.getAudioTracks()[0];
+
+              let rnnoise = await Rnnoise.load();
+              const denoiseState = rnnoise.createDenoiseState();
+
+              let agc = new Agc(0.0001);
+              let total = 0.0;
+              let total2 = 0.0;
+              let count = 0;
+              let c = 0;
+              let update_c = 0;
+              let buffer = new Float32Array(480);
+              let buffer2 = new Float32Array(480);
+              const generator = new MediaStreamTrackGenerator({ kind: "audio" });
+              const processor = new MediaStreamTrackProcessor({ track });
+              //let V = 0.0012354917800208962;
+              let V = 0.01;
+              //let V = 0.12354917800208962;
+              processor.readable
+                  .pipeThrough(
+                      new TransformStream({
+                          transform: (data, controller) => {
+                              count += data.numberOfFrames;
+                              c+=1;
+                              data.copyTo(buffer, { planeIndex: 0 });
+
+                              data.copyTo(buffer2, { planeIndex: 0 });
+                              //buffer2 = buffer;
+                              for (const [i, value] of buffer2.entries()) {
+                                  buffer2[i] = value * 0x7fff;
+                              }
+                              const vad = denoiseState.processFrame(buffer2);
+                              for (const [i, value] of buffer2.entries()) {
+                                  buffer2[i] = value / 0x7fff;
+                              }
+
+                              for (const [i, value] of buffer.entries()) {
+                                  total += value * value;
+                              }
+
+                              if (vad > 0.0) {
+                                  for (const [i, value] of buffer.entries()) {
+                                      buffer[i] = value / V;
+                                  }
+                                  agc.process(buffer, vad);
+                                  if (vad > 0.95) {
+                                      update_c +=1;
+                                  }
+                                  for (const [i, value] of buffer.entries()) {
+                                      buffer[i] = value * V;
+                                  }
+                              }
+
+                              for (const [i, value] of buffer.entries()) {
+                                  total2 += value * value;
+                              }
+
+                              if (c % 500 == 0) {
+                                  console.log("AVG: ", vad, total / count, total2 / count, update_c);
+                                  update_c = 0;
+                              }
+
+                              if (true) {
+                                  controller.enqueue(
+                                      new AudioData({
+                                          format: data.format,
+                                          sampleRate: data.sampleRate,
+                                          numberOfFrames: data.numberOfFrames,
+                                          numberOfChannels: data.numberOfChannels,
+                                          timestamp: data.timestamp,
+                                          data: buffer
+                                      })
+                                  );
+                                  buffer = new Float32Array(480);
+                                  data.close();
+                              } else {
+                                  controller.enqueue(data);
+                              }
+                          },
+                      }),
+                  )
+                  .pipeTo(generator.writable);
+              audioElement.srcObject = new MediaStream([generator]);
+          });
+      }
+      window.playAudio = playAudio();
+
+      playAudio();
+    </script>
+  </body>
+</html>

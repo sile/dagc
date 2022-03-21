@@ -54,7 +54,7 @@ impl MonoAgc {
             if !self.freezed {
                 let y = x.powi(2) / self.desired_output_rms;
                 let z = 1.0 + (self.distortion_factor * (1.0 - y));
-                self.gain *= z.max(0.1); // `max(0.1)` is for preventing 0 multiplication
+                self.gain *= z;
             }
         }
     }
