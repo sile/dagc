@@ -256,7 +256,7 @@
           thisAgcStream = await playThisAgcAudio();
 
           const audioElement = document.getElementById('audio');
-          audioElement.srcObject = originalStream;
+          audioElement.srcObject = thisAgcStream;
       })();
 
       function changeOutputAudio() {
