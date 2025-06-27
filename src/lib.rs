@@ -32,13 +32,13 @@ impl MonoAgc {
     /// `distortion factor` specifies a factor that determines how quickly or radically changes the gain value.
     /// If this value is too large, the AGC processing could introduce distortion to the output signals
     /// (usucally values such as `0.001` or `0.0001` are appropriate).
-    pub fn new(desired_output_rms: f32, distortion_factor: f32) -> Result<Self, Error> {
+    pub const fn new(desired_output_rms: f32, distortion_factor: f32) -> Result<Self, Error> {
         if !(desired_output_rms > 0.0 && desired_output_rms.is_finite()) {
             return Err(Error::InvalidDesiredOutputRms {
                 value: desired_output_rms,
             });
         }
-        if !(0.0..=1.0).contains(&distortion_factor) {
+        if distortion_factor < 0.0 || distortion_factor > 1.0 {
             return Err(Error::InvalidDistortionFactor {
                 value: distortion_factor,
             });
