@@ -16,4 +16,4 @@ categories = ["multimedia::audio"]
 coveralls = { repository = "sile/dagc" }
 
 [dependencies]
-thiserror = "1"
+thiserror = "2"
