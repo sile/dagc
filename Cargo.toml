@@ -10,5 +10,3 @@ repository = "https://github.com/sile/dagc"
 readme = "README.md"
 categories = ["multimedia::audio"]
 
-[dependencies]
-thiserror = "1"
