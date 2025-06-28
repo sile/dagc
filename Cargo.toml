@@ -10,10 +10,5 @@ repository = "https://github.com/sile/dagc"
 readme = "README.md"
 categories = ["multimedia::audio"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[badges]
-coveralls = { repository = "sile/dagc" }
-
 [dependencies]
 thiserror = "1"
