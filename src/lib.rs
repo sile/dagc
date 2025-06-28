@@ -5,15 +5,40 @@
 #![warn(missing_docs)]
 
 /// Possible errors.
-#[derive(Debug, thiserror::Error)]
-#[allow(missing_docs)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("`desired_output_rms` must be a finite positive number, but got {value}")]
-    InvalidDesiredOutputRms { value: f32 },
-
-    #[error("`distortion_factor` must be a number within `0.0 ..= 1.0`, but got {value}")]
-    InvalidDistortionFactor { value: f32 },
+    /// The desired output RMS value is invalid (must be finite and positive).
+    InvalidDesiredOutputRms {
+        /// The invalid value that was provided.
+        value: f32,
+    },
+    /// The distortion factor is invalid (must be between 0.0 and 1.0 inclusive).
+    InvalidDistortionFactor {
+        /// The invalid value that was provided.
+        value: f32,
+    },
 }
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::InvalidDesiredOutputRms { value } => {
+                write!(
+                    f,
+                    "`desired_output_rms` must be a finite positive number, but got {value}",
+                )
+            }
+            Error::InvalidDistortionFactor { value } => {
+                write!(
+                    f,
+                    "`distortion_factor` must be a number within `0.0 ..= 1.0`, but got {value}",
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 /// AGC for monaural channel.
 #[derive(Debug)]
@@ -93,9 +118,9 @@ mod tests {
     fn it_works() {
         let mut agc = MonoAgc::new(0.001, 0.0001).expect("unreachable");
         assert_eq!(agc.gain(), 1.0);
-        assert_eq!(agc.is_gain_frozen(), false);
+        assert!(!agc.is_gain_frozen());
         agc.freeze_gain(true);
-        assert_eq!(agc.is_gain_frozen(), true);
+        assert!(agc.is_gain_frozen());
 
         let mut samples = [0.5, 1.0, -0.2];
         agc.process(&mut samples);
